@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebAR粒子手势与微笑互动系统</title>
+    <title>圣诞快乐</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
@@ -29,10 +29,10 @@
             z-index: 100;
             text-align: center;
             font-size: 20px;
-            background: rgba(93, 93, 224, 0.8);
+            background: rgba(0, 0, 0, 0.8);
             padding: 30px;
             border-radius: 15px;
-            border: 2px solid rgba(19, 208, 255, 0.301);
+            border: 2px solid #0cf;
         }
         #webcamButton { 
             position: absolute;
@@ -259,7 +259,7 @@
 </head>
 <body>
     <div id="container">
-        <div id="loading">加载WebAR粒子系统...</div>
+        <div id="loading">加载圣诞氛围中...</div>
         <button id="webcamButton">启动摄像头</button>
         <div id="status">等待摄像头启动...</div>
         <canvas id="debugCanvas" width="320" height="240"></canvas>
@@ -267,7 +267,7 @@
         <div id="gestureInfo">
             <h3>手势控制</h3>
             <div class="gesture-item"><div class="gesture-indicator" id="indicator-open"></div>张手 - 粒子球</div>
-            <div class="gesture-item"><div class="gesture-indicator" id="indicator-scissors"></div>剪刀手 - "我是 Mok"</div>
+            <div class="gesture-item"><div class="gesture-indicator" id="indicator-scissors"></div>剪刀手 - "我是 Vick"</div>
             <div class="gesture-item"><div class="gesture-indicator" id="indicator-fist"></div>握拳 - 圆环</div>
             <div class="gesture-item"><div class="gesture-indicator" id="indicator-point"></div>食指 - 星星</div>
             <div class="gesture-item"><div class="gesture-indicator" id="indicator-thumb"></div>竖大拇指 - 爱心</div>
@@ -326,13 +326,14 @@
             SCISSORS: 2,
             FIST: 3,
             POINTING: 4,
-            THUMBS_UP: 5
+            THUMBS_UP: 5,
+            CHRISTMAS_TREE: 6  // 微笑时的圣诞树形状
         };
         
         let currentGesture = GESTURE_STATES.NONE;
         let targetGesture = GESTURE_STATES.NONE;
         let gestureTransitionProgress = 0;
-        let gestureTransitionSpeed = 0.1;
+        let gestureTransitionSpeed = 0.3; // 加快过渡速度（原来是0.1）
         
         // 面部状态
         let isSmiling = false;
@@ -365,7 +366,7 @@
             try {
                 // 创建场景
                 scene = new THREE.Scene();
-                scene.background = new THREE.Color(0x000011);
+                scene.background = new THREE.Color(0x0d4a0d); // 深圣诞绿背景（像圣诞树）
                 
                 // 添加星空背景
                 createStarfield();
@@ -474,10 +475,18 @@
                 particleData.positions[i3 + 1] = (Math.random() - 0.5) * 20;
                 particleData.positions[i3 + 2] = (Math.random() - 0.5) * 20;
                 
-                // 青色 (0, 1, 1)
-                particleData.colors[i3] = 0;
-                particleData.colors[i3 + 1] = 1;
-                particleData.colors[i3 + 2] = 1;
+                // 圣诞主题颜色：70%红色，30%金色
+                if (Math.random() < 0.7) {
+                    // 红色粒子（圣诞装饰品）
+                    particleData.colors[i3] = 1;      // 红色
+                    particleData.colors[i3 + 1] = 0.1; // 少量绿色
+                    particleData.colors[i3 + 2] = 0.1; // 少量蓝色
+                } else {
+                    // 金色粒子（星星、灯光）
+                    particleData.colors[i3] = 1;      // 红色
+                    particleData.colors[i3 + 1] = 0.8; // 金色（红+绿）
+                    particleData.colors[i3 + 2] = 0.2; // 少量蓝色
+                }
                 
                 // 随机初始速度
                 particleData.velocities[i3] = (Math.random() - 0.5) * 0.1;
@@ -556,13 +565,28 @@
                 video.srcObject = stream;
                 video.playsInline = true;
                 video.autoplay = true;
+                video.muted = true; // 静音以避免自动播放限制
                 video.style.display = 'none';
                 document.body.appendChild(video);
                 
-                // 等待视频数据加载
-                await new Promise((resolve) => {
-                    video.onloadeddata = resolve;
-                    setTimeout(resolve, 1000);
+                // 等待视频数据加载并开始播放
+                await new Promise((resolve, reject) => {
+                    const timeout = setTimeout(() => {
+                        reject(new Error('视频加载超时'));
+                    }, 5000);
+                    
+                    video.onloadeddata = () => {
+                        // 确保视频开始播放
+                        video.play().then(() => {
+                            clearTimeout(timeout);
+                            resolve();
+                        }).catch(reject);
+                    };
+                    
+                    video.onerror = (e) => {
+                        clearTimeout(timeout);
+                        reject(new Error('视频加载失败'));
+                    };
                 });
                 
                 // 初始化调试画布
@@ -704,25 +728,29 @@
                 detectGesture();
                 
                 // 在调试画布上绘制手部关键点
-                if (handCanvasCtx && video) {
+                if (handCanvasCtx && video && video.readyState >= 2) {
                     handCanvasCtx.save();
                     handCanvasCtx.clearRect(0, 0, 320, 240);
-                    handCanvasCtx.drawImage(video, 0, 0, 320, 240);
                     
-                    // 翻转画布以匹配视频镜像
+                    // 先翻转画布
                     handCanvasCtx.scale(-1, 1);
                     handCanvasCtx.translate(-320, 0);
                     
+                    // 绘制视频（翻转后）
+                    handCanvasCtx.drawImage(video, 0, 0, 320, 240);
+                    
                     // 绘制手部关键点和连接线
-                    drawConnectors(handCanvasCtx, handData.landmarks, HAND_CONNECTIONS, {
-                        color: '#00FF00',
-                        lineWidth: 2
-                    });
-                    drawLandmarks(handCanvasCtx, handData.landmarks, {
-                        color: '#FF0000',
-                        lineWidth: 1,
-                        radius: 3
-                    });
+                    if (typeof drawConnectors !== 'undefined' && typeof HAND_CONNECTIONS !== 'undefined') {
+                        drawConnectors(handCanvasCtx, handData.landmarks, HAND_CONNECTIONS, {
+                            color: '#00FF00',
+                            lineWidth: 2
+                        });
+                        drawLandmarks(handCanvasCtx, handData.landmarks, {
+                            color: '#FF0000',
+                            lineWidth: 1,
+                            radius: 3
+                        });
+                    }
                     
                     handCanvasCtx.restore();
                 }
@@ -730,6 +758,16 @@
                 handData.landmarks = null;
                 targetGesture = GESTURE_STATES.NONE;
                 updateGestureIndicators();
+                
+                // 即使没有检测到手部，也要绘制视频
+                if (handCanvasCtx && video && video.readyState >= 2) {
+                    handCanvasCtx.save();
+                    handCanvasCtx.clearRect(0, 0, 320, 240);
+                    handCanvasCtx.scale(-1, 1);
+                    handCanvasCtx.translate(-320, 0);
+                    handCanvasCtx.drawImage(video, 0, 0, 320, 240);
+                    handCanvasCtx.restore();
+                }
             }
         }
         
@@ -767,15 +805,18 @@
                 const newSmileLevel = Math.max(0, Math.min(100, (widthFactor * 0.7 + openFactor * 0.3) * 100));
                 smileLevel = newSmileLevel;
                 
-                // 判断是否微笑 (阈值设为40%)
-                const newIsSmiling = smileLevel > 40;
+                // 判断是否微笑 (阈值设为5%)
+                const newIsSmiling = smileLevel > 5;
                 
-                // 如果从"不笑"变为"笑"，则创建圣诞树
-                if (newIsSmiling && !isSmiling) {
-                    showChristmasTree();
-                }
-                // 如果从"笑"变为"不笑"，则移除圣诞树
-                else if (!newIsSmiling && isSmiling) {
+                // 如果微笑，让粒子形成圣诞树形状
+                if (newIsSmiling) {
+                    targetGesture = GESTURE_STATES.CHRISTMAS_TREE;
+                    if (!isSmiling) {
+                        showChristmasTree();
+                    }
+                } else if (isSmiling) {
+                    // 停止微笑，恢复默认状态
+                    targetGesture = GESTURE_STATES.NONE;
                     hideChristmasTree();
                 }
                 
@@ -791,14 +832,16 @@
                 }
                 
                 // 在面部画布上绘制关键点
-                if (faceCanvasCtx && video) {
+                if (faceCanvasCtx && video && video.readyState >= 2) {
                     faceCanvasCtx.save();
                     faceCanvasCtx.clearRect(0, 0, 320, 240);
-                    faceCanvasCtx.drawImage(video, 0, 0, 320, 240);
                     
-                    // 翻转画布
+                    // 先翻转画布
                     faceCanvasCtx.scale(-1, 1);
                     faceCanvasCtx.translate(-320, 0);
+                    
+                    // 绘制视频（翻转后）
+                    faceCanvasCtx.drawImage(video, 0, 0, 320, 240);
                     
                     // 绘制嘴部关键点
                     const mouthPoints = [13, 14, 61, 291];
@@ -810,13 +853,13 @@
                         faceCanvasCtx.fill();
                     });
                     
-                    // 绘制微笑程度文字
                     faceCanvasCtx.restore();
+                    
+                    // 绘制微笑程度文字（不翻转）
                     faceCanvasCtx.save();
                     faceCanvasCtx.fillStyle = isSmiling ? '#ffcc00' : '#ffffff';
                     faceCanvasCtx.font = 'bold 16px Arial';
                     faceCanvasCtx.fillText(`微笑: ${Math.round(smileLevel)}%`, 10, 30);
-                    
                     faceCanvasCtx.restore();
                 }
             } else {
@@ -829,9 +872,21 @@
                 document.getElementById('smile-level').textContent = '0';
                 document.getElementById('indicator-smile').classList.remove('active');
                 
-                // 清空面部画布
-                if (faceCanvasCtx) {
+                // 即使没有检测到面部，也要绘制视频
+                if (faceCanvasCtx && video && video.readyState >= 2) {
+                    faceCanvasCtx.save();
                     faceCanvasCtx.clearRect(0, 0, 320, 240);
+                    faceCanvasCtx.scale(-1, 1);
+                    faceCanvasCtx.translate(-320, 0);
+                    faceCanvasCtx.drawImage(video, 0, 0, 320, 240);
+                    faceCanvasCtx.restore();
+                    
+                    // 绘制微笑程度文字
+                    faceCanvasCtx.save();
+                    faceCanvasCtx.fillStyle = '#ffffff';
+                    faceCanvasCtx.font = 'bold 16px Arial';
+                    faceCanvasCtx.fillText(`微笑: 0%`, 10, 30);
+                    faceCanvasCtx.restore();
                 }
             }
         }
@@ -1127,44 +1182,34 @@
             });
         }
         
-        // 显示圣诞树
+        // 显示圣诞树（粒子形状）
         function showChristmasTree() {
-            if (!christmasTree) {
-                christmasTree = createChristmasTree();
-                scene.add(christmasTree);
-                
-                // 显示提示信息
-                const status = document.getElementById('status');
-                status.textContent = '检测到微笑！圣诞树出现了！';
-                status.style.color = '#ffcc00';
-                
-                setTimeout(() => {
-                    if (isSmiling) {
-                        status.textContent = '保持微笑，圣诞树会一直存在！';
-                    }
-                }, 2000);
-                
-                console.log("检测到微笑！圣诞树出现了！");
-            }
+            // 显示提示信息
+            const status = document.getElementById('status');
+            status.textContent = '检测到微笑！粒子正在形成圣诞树！';
+            status.style.color = '#ffcc00';
+            
+            setTimeout(() => {
+                if (isSmiling) {
+                    status.textContent = '保持微笑，圣诞树会一直存在！';
+                }
+            }, 2000);
+            
+            console.log("检测到微笑！粒子正在形成圣诞树！");
         }
         
-        // 隐藏圣诞树
+        // 隐藏圣诞树（粒子形状）
         function hideChristmasTree() {
-            if (christmasTree) {
-                scene.remove(christmasTree);
-                christmasTree = null;
-                
-                // 恢复状态提示
-                const status = document.getElementById('status');
-                status.textContent = '微笑消失，圣诞树隐藏了。';
-                status.style.color = '#ffffff';
-                
-                setTimeout(() => {
-                    status.textContent = '检测已激活 - 请展示手势或微笑';
-                }, 2000);
-                
-                console.log("微笑消失，圣诞树隐藏。");
-            }
+            // 恢复状态提示
+            const status = document.getElementById('status');
+            status.textContent = '微笑消失，圣诞树消失了。';
+            status.style.color = '#ffffff';
+            
+            setTimeout(() => {
+                status.textContent = '检测已激活 - 请展示手势或微笑';
+            }, 2000);
+            
+            console.log("微笑消失，圣诞树消失。");
         }
         
         // ============ 粒子系统更新 ============
@@ -1281,10 +1326,15 @@
                 positions[i3 + 1] = particleData.positions[i3 + 1];
                 positions[i3 + 2] = particleData.positions[i3 + 2];
                 
-                // 根据速度调整颜色强度
-                const colorIntensity = Math.min(0.5 + speed * 0.5, 1);
-                colors[i3 + 1] = colorIntensity;
-                colors[i3 + 2] = colorIntensity;
+                // 根据速度调整颜色强度（保持圣诞主题）
+                const colorIntensity = Math.min(0.6 + speed * 0.4, 1);
+                // 保持原有的圣诞颜色比例，只调整亮度
+                const baseR = particleData.colors[i3];
+                const baseG = particleData.colors[i3 + 1];
+                const baseB = particleData.colors[i3 + 2];
+                colors[i3] = baseR * colorIntensity;
+                colors[i3 + 1] = baseG * colorIntensity;
+                colors[i3 + 2] = baseB * colorIntensity;
             }
             
             // 标记缓冲区需要更新
@@ -1354,6 +1404,77 @@
                         targetZ = Math.sin(t) * 0.5;
                         break;
                         
+                    case GESTURE_STATES.CHRISTMAS_TREE:
+                        // 圣诞树形状（更真实的层次结构）
+                        const numLayers = 6; // 6层，更明显的层次
+                        const trunkParticles = Math.floor(PARTICLE_COUNT * 0.05); // 5%的粒子用于树干
+                        
+                        if (i < trunkParticles) {
+                            // 树干部分（底部中心）
+                            const trunkHeight = 1.2;
+                            const trunkRadius = 0.3;
+                            const trunkProgress = i / trunkParticles;
+                            const trunkAngle = (i / trunkParticles) * Math.PI * 2;
+                            
+                            targetY = -4 + trunkProgress * trunkHeight;
+                            targetX = Math.cos(trunkAngle) * trunkRadius * (0.3 + trunkProgress * 0.7);
+                            targetZ = Math.sin(trunkAngle) * trunkRadius * (0.3 + trunkProgress * 0.7);
+                        } else {
+                            // 树叶部分
+                            const leafParticles = PARTICLE_COUNT - trunkParticles;
+                            const leafIndex = i - trunkParticles;
+                            const treeLayer = Math.floor((leafIndex / leafParticles) * numLayers);
+                            const particlesPerLayer = leafParticles / numLayers;
+                            const particleInLayer = leafIndex % particlesPerLayer;
+                            const layerProgress = particleInLayer / particlesPerLayer;
+                            
+                            const treeHeight = 7.5;
+                            const baseWidth = 4.0; // 底部更宽
+                            
+                            // 每层的高度和位置（有间隔，更真实）
+                            const layerSpacing = treeHeight / (numLayers + 1);
+                            const layerHeight = layerSpacing * 0.7; // 每层高度
+                            const layerYBase = -4 + trunkParticles / PARTICLE_COUNT * 1.2 + treeLayer * layerSpacing;
+                            targetY = layerYBase + layerProgress * layerHeight;
+                            
+                            // 每层的宽度递减（更自然的锥形曲线）
+                            const layerWidthFactor = Math.pow(1 - treeLayer / numLayers, 0.7);
+                            const layerWidth = baseWidth * layerWidthFactor;
+                            
+                            // 每层内的角度分布（圆形）
+                            const treeAngle = (particleInLayer / particlesPerLayer) * Math.PI * 2;
+                            
+                            // 每层内的半径分布（从中心到边缘）
+                            // 使用更密集的中心分布，模拟真实的树叶分布
+                            const radiusFactor = Math.pow(layerProgress, 0.6); // 非线性分布
+                            const treeRadius = layerWidth * (0.15 + radiusFactor * 0.85);
+                            
+                            targetX = Math.cos(treeAngle) * treeRadius;
+                            targetZ = Math.sin(treeAngle) * treeRadius;
+                            
+                            // 树顶星星（最上层的一部分粒子，约20%）
+                            if (treeLayer === numLayers - 1 && layerProgress > 0.8) {
+                                const starPoints = 5;
+                                const starIndex = particleInLayer - particlesPerLayer * 0.8;
+                                const starProgress = starIndex / (particlesPerLayer * 0.2);
+                                const starAngle = (starIndex % (particlesPerLayer * 0.2 / starPoints)) / (particlesPerLayer * 0.2 / starPoints) * Math.PI * 2;
+                                const starRadius = 0.5 + Math.sin(starAngle * starPoints) * 0.3;
+                                targetX = Math.cos(starAngle) * starRadius;
+                                targetZ = Math.sin(starAngle) * starRadius;
+                                targetY = layerYBase + layerHeight * 0.9;
+                            }
+                            
+                            // 添加一些装饰品位置（随机分布在树上）
+                            if (i % 50 === 0 && treeLayer > 0 && treeLayer < numLayers - 1) {
+                                // 装饰品稍微突出
+                                const decorAngle = Math.random() * Math.PI * 2;
+                                const decorRadius = treeRadius * 1.15;
+                                targetX = Math.cos(decorAngle) * decorRadius;
+                                targetZ = Math.sin(decorAngle) * decorRadius;
+                            }
+                        }
+                        break;
+                        
                     default:
                         // 随机云状
                         targetX = (Math.random() - 0.5) * 10;
@@ -1389,19 +1510,26 @@
                 particleData.velocities[i3 + 1] += (Math.random() - 0.5) * explosionForce;
                 particleData.velocities[i3 + 2] += (Math.random() - 0.5) * explosionForce;
                 
-                // 短暂改变颜色为爆炸效果
-                particleData.colors[i3] = 1; // 红色
-                particleData.colors[i3 + 1] = 0.8; // 绿色
-                particleData.colors[i3 + 2] = 0; // 蓝色
+                // 短暂改变颜色为爆炸效果（金色闪光）
+                particleData.colors[i3] = 1;      // 红色
+                particleData.colors[i3 + 1] = 0.9; // 金色（高亮）
+                particleData.colors[i3 + 2] = 0.3; // 少量蓝色
             }
             
-            // 0.5秒后恢复颜色
+            // 0.5秒后恢复圣诞主题颜色
             setTimeout(() => {
                 for (let i = 0; i < PARTICLE_COUNT; i++) {
                     const i3 = i * 3;
-                    particleData.colors[i3] = 0; // 青色
-                    particleData.colors[i3 + 1] = 1;
-                    particleData.colors[i3 + 2] = 1;
+                    // 恢复为圣诞主题颜色（70%红色，30%金色）
+                    if (Math.random() < 0.7) {
+                        particleData.colors[i3] = 1;      // 红色
+                        particleData.colors[i3 + 1] = 0.1; // 少量绿色
+                        particleData.colors[i3 + 2] = 0.1; // 少量蓝色
+                    } else {
+                        particleData.colors[i3] = 1;      // 红色
+                        particleData.colors[i3 + 1] = 0.8; // 金色
+                        particleData.colors[i3 + 2] = 0.2; // 少量蓝色
+                    }
                 }
             }, 500);
         }
